@@ -1,0 +1,103 @@
+---
+title: "Marathonbet's accuracy in predicting sumo results"
+author: "Mikhail Zhilkin"
+date: "`r Sys.Date()`"
+tags: [sumo, odds, marathonbet, betting, prediction, accuracy]
+output: html_notebook
+---
+
+&nbsp;
+
+The only packages we'll need are [ROCR](https://cran.r-project.org/web/packages/ROCR/index.html) (to measure prediction accuracy) and [tidyverse](https://cran.r-project.org/web/packages/tidyverse/index.html) (for everything else --- [tidyverse.org](http://tidyverse.org/)):
+
+```{r, message=FALSE, warning=FALSE}
+library(ROCR)
+library(tidyverse)
+```
+
+&nbsp;
+
+Marathonbet started offering bets on [Makuuchi](https://en.wikipedia.org/wiki/Makuuchi) bouts. I've collected the odds for January and March tournaments from [betmarathon.com/en/betting/Sumo/](https://www.betmarathon.com/en/betting/Sumo/) (available only during [Honbasho](https://en.wikipedia.org/wiki/Honbasho)):
+
+```{r}
+odds <- read_csv("odds.csv", col_types = "cicdcd")
+odds %>% arrange(basho, day)
+```
+
+&nbsp;
+
+I'd missed the first day of the January tournament, and asked the customer service if there was an archive with historical odds. No:
+
+> Please be aware that this option is not available.  
+> Due to the odds are movement depents of the fluctuations of the market.
+
+Anyway, `r nrow(odds)` bouts should be enough for our purposes:
+
+```{r}
+odds %>% count(basho, day)
+```
+
+&nbsp;
+
+Results for all divisions are easily fetched from [Sumo Reference](http://sumodb.sumogames.de/) (day 16 stands for play-offs):
+
+```{r}
+results <- read_csv("results.csv", col_types = "cicicic")
+results %>% count(basho, day)
+```
+
+&nbsp;
+
+To join *odds* with *results*:
+
+1. As they don't necessarily order wrestlers (*rikishi1*, *rikishi2*) in the same way, join *odds* with a mirrored copy of itself.
+2. Calculate implied probability of the first wrestler winning.
+3. Filter out forfeits (see [fusen](https://en.wiktionary.org/wiki/fusen)).
+
+```{r}
+odds_and_results <- merge(
+	rbind(
+		odds,
+		odds %>% rename(
+			rikishi1 = rikishi2, odds1 = odds2,
+			rikishi2 = rikishi1, odds2 = odds1
+		)
+	) %>% mutate(win1_prob = odds2 / (odds1 + odds2)),
+	results %>% filter(kimarite != "fusen")
+)
+odds_and_results
+```
+
+&nbsp;
+
+Sanity check --- what's the distribution of implied probability to win for winner and losers?
+
+```{r}
+ggplot(odds_and_results, aes(factor(win1, labels = c("lost", "won")), win1_prob)) + 
+	geom_boxplot(outlier.size = .5) + 
+	geom_jitter(size = .5, width = .1) + 
+	labs(x = "", y = "implied win probability")
+```
+
+&nbsp;
+
+To measure prediction accuracy, we'll use [ROC curve](http://mlwiki.org/index.php/ROC_Analysis#ROC_Analysis_in_R):
+
+```{r}
+pred <- prediction(
+	predictions = odds_and_results$win1_prob,
+	labels = odds_and_results$win1
+)
+perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+ggplot(data.frame(x = perf@x.values[[1]], y = perf@y.values[[1]]), aes(x, y)) + 
+	geom_line() + 
+	labs(
+		title = sprintf("%.1f%%", unlist(performance(pred, "auc")@y.values) * 100),
+		subtitle = "area under ROC curve",
+		x = "false positive rate",
+		y = "false negative rate"
+	) + 
+	geom_abline(intercept = 0, slope = 1, linetype = "dotted")
+```
+
+&nbsp;
