@@ -1,0 +1,173 @@
+---
+title: "Task 1"
+author: "Mikhail Zhilkin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+```{r}
+library(scales)
+library(tidyverse)
+```
+
+&nbsp;
+
+Import the data set:
+
+```{r}
+df <- readxl::read_excel(
+	"Task11part-2hr30mins.xlsx",
+	range = cell_cols("A:D")
+)
+```
+
+```{r}
+head(df)
+```
+
+&nbsp;
+
+Distribution of players across groups looks fine:
+
+```{r}
+df %>% 
+	count(Country, Group) %>% 
+	spread(Country, n)
+```
+
+&nbsp;
+
+Gross revenue per player would indicate that Group 3 ($25 bonus) performed best:
+
+```{r fig.width=10}
+df %>% 
+	mutate(GrossRev = Activity * .0213) %>% 
+	group_by(Group) %>% 
+	summarise(mean(GrossRev)) %>% 
+	ggplot() +
+		geom_col(aes(ordered(Group), `mean(GrossRev)`), alpha = .5) +
+		labs(x = "Group", y = "") +
+		scale_y_continuous(labels = dollar_format())
+```
+
+&nbsp;
+
+Net revenue (gross revenue minus bonus) gives victory by a slim margin to Group 4 ($5 bonus):
+
+```{r fig.width=10}
+df %>% 
+	mutate(
+		GrossRev = Activity * .0213,
+		NetRev = GrossRev - c(20, 15, 25, 5, 0)[Group]
+	) %>% 
+	group_by(Group) %>% 
+	summarise(mean(GrossRev), mean(NetRev)) %>% 
+	ggplot() +
+		geom_col(aes(ordered(Group), `mean(GrossRev)`), alpha = .5) +
+		geom_col(aes(ordered(Group), `mean(NetRev)`), alpha = .5) +
+		labs(x = "Group", y = "") +
+		scale_y_continuous(labels = dollar_format())
+```
+
+&nbsp;
+
+Different results in different countries suggest that things are more complicated, with no group winning across the board:
+
+```{r fig.width=10}
+df %>% 
+	mutate(NetRev = Activity * .0213 - c(20, 15, 25, 5, 0)[Group]) %>% 
+	group_by(Country, Group) %>% 
+	summarise(mean(NetRev)) %>% 
+	ggplot() +
+		facet_wrap(~Country) +
+		geom_col(aes(ordered(Group), `mean(NetRev)`), alpha = .5) +
+		labs(x = "Group", y = "") +
+		scale_y_continuous(labels = dollar_format())
+```
+
+&nbsp;
+
+Distribution of net revenue is extremely uneven, with `r sprintf("%.1f%%", df %>% mutate(NetRev = Activity * .0213 - c(20, 15, 25, 5, 0)[Group]) %>% arrange(-NetRev) %>% transmute(x = row_number() / n(), y = cumsum(NetRev) / sum(NetRev)) %>% filter(y >= .8) %>% head(1) %>% pull(x) %>% '*' (100))` of top spenders responsible for 80% of it (the downward bend is due to players with *negative* net revenue):
+
+```{r fig.width=10}
+df %>% 
+	mutate(NetRev = Activity * .0213 - c(20, 15, 25, 5, 0)[Group]) %>% 
+	arrange(-NetRev) %>% 
+	transmute(x = row_number() / n(), y = cumsum(NetRev) / sum(NetRev)) %>% 
+	ggplot() +
+		geom_line(aes(x, y)) +
+		labs(x = "Players", y = "Net Revenue") +
+		scale_x_continuous(labels = percent_format()) +
+		scale_y_continuous(labels = percent_format())
+```
+
+&nbsp;
+
+Let's calculate 95% confidence interval for net revenue per player for each Country/Group using [bootstrapping](https://en.wikipedia.org/wiki/Bootstrapping_(statistics)):
+
+```{r}
+tmp <- expand.grid(
+	Country = unique(df$Country),
+	Group = unique(df$Group),
+	stringsAsFactors = FALSE
+)
+```
+
+```{r}
+df2 <- do.call(
+	rbind,
+	mapply(
+		function(a, b) {
+			x <- df %>% filter(Country == a, Group == b) %>% pull(Activity)
+			
+			y <- quantile(
+				replicate(1e+4, { mean(sample(x, length(x), replace = TRUE)) }),
+				c(.05, .95)
+			)
+			
+			tibble(
+				Country = a,
+				Group = b,
+				Lower = y[1] * .0213 - c(20, 15, 25, 5, 0)[b],
+				Upper = y[2] * .0213 - c(20, 15, 25, 5, 0)[b]
+			)
+		},
+		tmp$Country,
+		tmp$Group,
+		SIMPLIFY = FALSE
+	)
+)
+```
+
+&nbsp;
+
+Swains Island appears to be the only market with a clear indication that the campaign has been beneficial, with control group falling behind. Otherwise, one cannot draw conclusions from the data available:
+
+```{r fig.width=10, message=FALSE}
+df %>% 
+	mutate(NetRev = Activity * .0213 - c(20, 15, 25, 5, 0)[Group]) %>% 
+	group_by(Country, Group) %>% 
+	summarise(mean(NetRev)) %>% 
+	inner_join(df2) %>% 
+	ggplot() +
+		facet_wrap(~Country) +
+		geom_col(aes(ordered(Group), `mean(NetRev)`), alpha = .5) +
+		geom_segment(aes(
+			x = ordered(Group),
+			xend = ordered(Group),
+			y = Lower,
+			yend = Upper
+		)) +
+		labs(x = "Group", y = "") +
+		scale_y_continuous(labels = dollar_format())
+```
+
+&nbsp;
+
+Suggestions for future analysis & research:
+
+* Identify biggest spenders and remove them from this kind of analysis, which may result in more narrow confidence intervals. (This is based on a risky assumption that high spenders' behaviour isn't affected by a small bonus.)
+* Segment players based on their pre-test behaviour (e.g. low/medium/high spenders) and analyse the impact of bonus campaign on each segment separately.
+* If possible, test campaign on a larger number of users.
+
+&nbsp;
