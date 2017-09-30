@@ -1,0 +1,131 @@
+---
+title: "Что там с Релятивио?"
+author: "Михаил Жилкин"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+&nbsp;
+
+Посмотрим же, что там у нас накапало.
+
+Все графики интерактивные --- можно ховерить, зумить и т.п.
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(plotly)
+```
+
+&nbsp;
+
+Все посещения:
+
+```{r}
+df <- jsonlite::fromJSON("https://relativio-jccm.rhcloud.com/api/data")
+```
+
+```{r}
+df %>% 
+	mutate(
+		timestamp = as.POSIXct(
+			substr(timestamp, 1, 19),
+			format = "%Y-%m-%dT%H:%M:%S"
+		)
+	) %>% 
+	plot_ly(width = 800) %>% 
+	add_histogram(
+		color = I("black"),
+		x = ~timestamp
+	) %>% 
+	layout(
+		title = sprintf(
+			"Всего посещений: %s",
+			format(nrow(df), big.mark = ",")
+		),
+		xaxis = list(
+			dtick = 86400000,
+			title = ""
+		)
+	)
+```
+
+&nbsp;
+
+Только страницы, начинающиеся с `http://ruletka.se/`:
+
+```{r}
+df %>% 
+	filter(grepl("^http://ruletka.se/", link)) %>% 
+	count(link) %>% 
+	plot_ly(width = 800) %>% 
+	add_bars(
+		hoverinfo = "text",
+		marker = list(
+			color = "black",
+			line = list(color = "white", width = .5)
+		),
+		text = ~stringr::str_match(link, "^http://ruletka.se/(.*)")[, 2],
+		x = ~n,
+		y = 1
+	) %>% 
+	layout(
+		bargap = 0,
+		barmode = "stack",
+		hovermode = "closest",
+		title = sprintf(
+			"%.1f%% страниц с одним посещением",
+			df %>% 
+				filter(grepl("^http://ruletka.se/", link)) %>% 
+				count(link) %>% 
+				count(n) %>% 
+				summarise(nn[n == 1] / sum(nn)) %>% 
+				.[[1]] * 100
+		),
+		xaxis = list(title = "Посещений")
+	)
+```
+
+&nbsp;
+
+Статистика посещений с валидными токенами (`_relativio_...`):
+ 
+```{r}
+df %>% 
+	filter(grepl("^_relativio_", token)) %>% 
+	count(token) %>% 
+	plot_ly(width = 800) %>% 
+	add_bars(
+		hoverinfo = "text",
+		marker = list(
+			color = "black",
+			line = list(color = "white", width = .5)
+		),
+		text = ~stringr::str_match(token, "^_relativio_(.*)")[, 2],
+		x = ~n,
+		y = 1
+	) %>% 
+	layout(
+		bargap = 0,
+		barmode = "stack",
+		hovermode = "closest",
+		title = sprintf(
+			"%.1f%% токенов с одним посещением",
+			df %>% 
+				filter(grepl("^_relativio_", token)) %>% 
+				count(token) %>% 
+				count(n) %>% 
+				summarise(nn[n == 1] / sum(nn)) %>% 
+				.[[1]] * 100
+		),
+		xaxis = list(
+			dtick = 1,
+			title = "Посещений"
+		)
+	)
+```
+
+&nbsp;
+
+Вот такие пироги.
+
+&nbsp;

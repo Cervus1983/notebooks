@@ -1,0 +1,88 @@
+---
+title: "The Algorithm"
+author: "Mikhail Zhilkin"
+date: '`r Sys.Date()`'
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document: default
+---
+
+&nbsp;
+
+
+
+```{r, message=FALSE, warning=FALSE}
+library(jsonlite)
+library(tidyverse)
+```
+
+&nbsp;
+
+Fetch JSON blob:
+
+```{r}
+df <- fromJSON("https://relativio-jccm.rhcloud.com/api/data")
+```
+
+```{r}
+head(df)
+```
+
+&nbsp;
+
+Find tokens with multiple unique links:
+
+```{r}
+tokens_with_multiple_links <- df %>% 
+	# valid links & tokens
+	filter(
+		grepl("^http://ruletka.se/", link),
+		grepl("^_relativio_", token)
+	) %>% 
+	# remove common part
+	mutate(
+		link = stringr::str_match(link, "^http://ruletka.se/(.*)")[, 2],
+		token = stringr::str_match(token, "^_relativio_(.*)")[, 2]
+	) %>% 
+	# group unique links by token
+	group_by(token) %>% 
+	summarise(links = paste(unique(link), collapse = ",")) %>% 
+	# only leave tokens with multiple links (column "links"" contains a comma)
+	filter(grepl(",", links))
+```
+
+```{r}
+head(tokens_with_multiple_links)
+```
+
+&nbsp;
+
+This function takes a comma-delimited string with links and turns it into a matrix with all possible link-pairs:
+
+```{r}
+str2xref <- function(s) expand.grid(
+		A = strsplit(s, ",")[[1]],
+		B = strsplit(s, ",")[[1]],
+		stringsAsFactors = FALSE
+	) %>% filter(A < B)
+```
+
+&nbsp;
+
+For example:
+
+```{r}
+str2xref("ads/besplatno-parikmaxer/,ads/nuzhen-rabotnik-s-pravami/,ads/sdam-komnatu-25/")
+```
+
+&nbsp;
+
+Do it for all strings:
+
+```{r}
+do.call(
+	rbind,
+	lapply(tokens_with_multiple_links$links, str2xref)
+) %>% count(A, B) %>% arrange(-n)
+```
