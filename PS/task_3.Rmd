@@ -1,0 +1,49 @@
+---
+title: "Task 3"
+author: "Mikhail Zhilkin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+&nbsp;
+
+# Define VIP
+
+Obvious definition of VIP as players who yield high revenue presents a few challenges:
+
+* Total revenue or that from a specific product (poker VIP, casino VIP, etc)?
+* Absolute number or relative to other players (e.g. top 1% or top spenders generating 50% of total revenue)?
+* What time period --- since they signed up, last N days, or even predicted LTV (provided there's an adequate model)?
+
+For cross-vertical definition, we should use total revenue. Other choices depend on what makes sense for specific business, existing terminology, etc. Consistency is likely to be more important than other considerations.
+
+&nbsp;
+
+# Reporting
+
+With VIP defined, we need to understand the current state of affairs as well as historical trends. We'll want to build a dashboard or two with daily/weekly/monthly KPIs (activity, revenue, churn/retention) as well as player movement between segments.
+
+&nbsp;
+
+# Predictive modelling
+
+We'll want these two predictive models:
+
+* Churn prediction --- identify VIP who're likely to drop into non-VIP segment or churn altogether.<br>Can be part of a general churn prediction model.
+* VIP prediction --- identify recently signed up players who're likely to become VIP.<br>Can be part of a general LTV prediction model.
+
+&nbsp;
+
+# Experimentation
+
+Predictive models will generate hypotheses as to
+
+* what factors contribute to a 'birth' of VIP,
+* what factors affect their LTV,
+* what factors contribute to their churn.
+
+&nbsp;
+
+We'll want to convert these hypotheses into ideas (product features, CRM campaigns, live events), which can be A/B tested with a focus on VIP segment.
+
+&nbsp;
