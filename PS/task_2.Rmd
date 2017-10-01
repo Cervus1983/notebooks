@@ -1,0 +1,134 @@
+---
+title: "Task 2"
+author: "Mikhail Zhilkin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+```{r}
+library(scales)
+library(tidyverse)
+```
+
+```{r, include=FALSE}
+Sys.setlocale("LC_ALL","English")
+```
+
+&nbsp;
+
+Import the data set:
+
+```{r}
+dailyplay <- readxl::read_excel("Task22parts-2hr30mins[1].xlsx", sheet = 1)
+promotions <- readxl::read_excel("Task22parts-2hr30mins[1].xlsx", sheet = 2)
+```
+
+&nbsp;
+
+Aggregated data:
+
+```{r, message=FALSE}
+df <- dailyplay %>% 
+	group_by(Date) %>% 
+	summarise(Players = n(), Revenue = sum(Revenue)) %>% 
+	inner_join(promotions) %>% 
+	mutate(
+		Dayofweek = weekdays(Date),
+		Promo = ifelse(is.na(Promo), " ", Promo)
+	)
+```
+
+```{r}
+df
+```
+
+&nbsp;
+
+Simple linear regression model:
+
+```{r}
+fit <- df %>% lm(Revenue ~ Dayofweek + Promo + Players, .)
+```
+
+```{r}
+summary(fit)
+```
+
+&nbsp;
+
+**a. What is the predicted revenue for the below days?**
+
+```{r}
+a <- tibble(
+	Dayofweek = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+	Promo = c(" ", "A", " ", "B", "A", "B", " "),
+	Players = c(3, 4, 4, 5, 6, 6, 7) * 1000
+)
+```
+
+```{r}
+cbind(a, predict.lm(fit, a))
+```
+
+&nbsp;
+
+**b. Which promotion do you think performs better and why?**
+
+From the model summary above, it's clear that Promo B has a significantly higher positive impact on revenue. This can easily be verified by predicting revenue for Promo A and Promo B with everything else being equal. Indeed, prediction for Promo B is much higher:
+
+```{r}
+predict.lm(
+	fit,
+	tibble(
+		Dayofweek = rep("Monday", 2),
+		Promo = c("A", "B"),
+		Players = rep(1000, 2)
+	)
+)
+```
+
+&nbsp;
+
+**c. What are the 95% confidence intervals to your revenue predictions?**
+
+Last two columns contain lower/upper bounds of the confidence interval at the default level of 95%:
+
+```{r}
+cbind(a, predict.lm(fit, a, interval = "confidence"))
+```
+
+&nbsp;
+
+**d. Plot the residuals and explain what they tell us about the model**
+
+Residuals look reasonably random, although the model appears to overestimate revenue on 'bad' days and, to some extent, very good ones, too:
+
+```{r fig.width=10}
+plot(fit, which = 1)
+```
+
+&nbsp;
+
+We can achieve better results with a slightly more sophisticated model:
+
+```{r}
+fit2 <- df %>% lm(Revenue ~ Dayofweek * Promo * Players + 0, .)
+```
+
+```{r fig.width=10}
+plot(fit2, which = 1)
+```
+
+&nbsp;
+
+**e. With more time and data would you approach this problem differently?**
+
+Things I'd consider doing:
+
+* Take a close look at outliers --- days for which prediction is way off. Can they be explained? Do they suggest any variables we might want to include in the model?
+
+* Player segmentation (e.g. low/medium/ high spenders) --- as another variable in the model, or even separate model for each segment.
+
+* In addition to the promo running on a given day, take into account promotional activity *prior* to that day. The impact of the first day of a promotion campaign can be quite different from that of day 5.
+
+&nbsp;
